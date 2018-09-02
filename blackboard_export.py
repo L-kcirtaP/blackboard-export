@@ -12,9 +12,12 @@ from getpass import getpass
 from os import path, makedirs
 import functools
 
-BB_DOMAIN = 'https://blackboard.utexas.edu'
+from bs4 import BeautifulSoup
+import base64
+
+BB_DOMAIN = 'https://bb.cuhk.edu.cn'
 BB_MOBILE_API = BB_DOMAIN + '/webapps/Bb-mobile-BBLEARN'
-LOGIN_URL = 'https://blackboard.utexas.edu/webapps/login/'
+LOGIN_URL = 'https://bb.cuhk.edu.cn/webapps/login/'
 COURSES_URL = BB_MOBILE_API + '/enrollments?course_type=COURSE'
 COURSE_MAP_URL = BB_MOBILE_API + '/courseMap'
 COURSE_DATA_URL = BB_MOBILE_API + '/courseData'
@@ -36,7 +39,6 @@ makedirs = functools.partial(makedirs, exist_ok=True)
 
 def ensure_list(fun):
     """Decorator to ensure that the wrapped function always returns a list.
-
     This exists because xmltodict will return a dict if there is only one
     instance of an xml element, but it will returns a list of dicts if there
     are multiple elements with the the same name.
@@ -53,7 +55,6 @@ def ensure_list(fun):
 
 def strip_keys(keys):
     """Decorator to strip keys from a dict like dict[key1][key2]...
-
     Keys are stripped off in the order they are given in the `keys` list.
     """
     def actual_decorator(fun):
@@ -66,7 +67,6 @@ def strip_keys(keys):
 
 def cache_data(file_suffix_or_index):
     """Decorator to use a file cache for the result of the wrapped function.
-
     Results are written to and read from xml files stored at XML_CACHE_PATH.
     The name of each file consists of the course_id with some string appended
     to it. If `file_suffix_or_index` is a string, then that string is appended;
@@ -104,7 +104,6 @@ def cache_data(file_suffix_or_index):
 
 def get_course_data(session, course, course_section):
     """Query Blackboard's mobile API for a section of the given `course`.
-
     :param requests.Session session: Session used to perform the request, must
         be authenticated with Blackboard
     :param dict course: Blackboard course whose section is being queried
@@ -121,7 +120,6 @@ def get_course_data(session, course, course_section):
 @cache_data('coursemap')
 def get_course_map(session, course):
     """Query Blackboard's mobile API for the given course's course map.
-
     :param requests.Session session: Session used to perform the request, must
         be authenticated with Blackboard
     :param dict course: Blackboard course whose course map is being queried
@@ -135,7 +133,6 @@ def get_course_map(session, course):
 @cache_data('grades')
 def get_course_grades(session, course):
     """Query Blackboard's mobile API for the given course's grades.
-
     :param requests.Session session: Session used to perform the request, must
         be authenticated with Blackboard
     :param dict course: Blackboard course whose grades are being queried
@@ -148,7 +145,6 @@ def get_course_grades(session, course):
 @cache_data('announcements')
 def get_course_announcements(session, course):
     """Query Blackboard's mobile API for the given course's announcements.
-
     :param requests.Session session: Session used to perform the request, must
         be authenticated with Blackboard
     :param dict course: Blackboard course whose announcements are being queried
@@ -160,7 +156,6 @@ def get_course_announcements(session, course):
 @cache_data(2)
 def get_content_detail(session, course, content_id):
     """Query Blackboard's mobile API for content from the given course.
-
     :param requests.Session session: Session used to perform the request, must
         be authenticated with Blackboard
     :param dict course: Blackboard course whose announcements are being queried
@@ -175,7 +170,6 @@ def get_content_detail(session, course, content_id):
 @cache_data('courses')
 def get_courses(session, _):
     """Query Blackboard's mobile API for a user's courses.
-
     :param request.Session session: Session used to perform the request, must
         be authenticated with Blackboard
     :param _: Hacky parameter for compatibility with the cache_data decorator
@@ -185,7 +179,6 @@ def get_courses(session, _):
 
 def parse_course_map(session, course, course_map, cwd):
     """Download all the downloadable items found in the given `course_map`.
-
     :param requests.Session session: Session used to perform download requests,
         must be authenticated with Blackboard
     :param dict course: Blackboard course whose course map is being parsed
@@ -251,7 +244,6 @@ def parse_course_map(session, course, course_map, cwd):
 
 def parse_announcements(announcements, base_path):
     """Parse the `announcements` list, saving each item to its own html file.
-
     :param list announcements: Announcements that are to be parsed and saved
     :param str base_path: Path to save announcement files to
     """
@@ -276,7 +268,6 @@ def parse_announcements(announcements, base_path):
 
 def parse_grades(grades, base_path):
     """Parse the `grades` list, saving the grades to a csv file.
-
     :param list grades: Grades that are to be parsed and saved
     :param str base_path: Path to save grade csv to
     """
@@ -299,11 +290,31 @@ def main():
     makedirs(XML_CACHE_PATH)
 
     session = requests.Session()
+    # generate payload
+    login_page = session.get(LOGIN_URL)
+    login_page_content = BeautifulSoup(login_page.content)
+    one_time_token = login_page_content.find('input', attrs={'name':'one_time_token'})['value']
+    tstring = login_page_content.find('input', attrs={'name':'tstring'})['value']
+    b64pwd = base64.b64encode(user_password.encode('ascii'))
+    b64unicode = ''
+
     # authenticate the session
     print('Authenticating')
     session.post(LOGIN_URL, data={
-        'user_id': user_eid,
-        'password': user_password})
+        #'action': 'login',
+        #'auth_type': '',
+        #'encoded_pw': b64pwd,
+        #'encoded_pw_unicode': b64unicode,
+        #'login': 'LOGIN',
+        #'message': 'null',
+        #'new_loc': 'null',
+        #'one_time_token': one_time_token,
+        #'passwd': '',
+        #'password': '',
+        'pstring': b64pwd,
+        #'remote_user':'',
+        'tstring': tstring,
+        'user_id': user_eid})
 
     # get courses user has been enrolled in
     print('Getting course list')
